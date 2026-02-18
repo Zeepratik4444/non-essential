@@ -61,16 +61,20 @@ class SkillsCrew:
         )
 
 
-    def run(self, task_description: str, **extra_inputs: Any) -> str:
+    def run(self, task_description: str, chat_history: str = "No previous context.", **extra_inputs: Any) -> str:
         """
-        Kick off the crew with a task description.
+        Kick off the crew with a task description and optional chat history.
         Extra inputs are merged and passed to task interpolation.
 
         Usage:
             result = SkillsCrew().run("Find papers on LLM memory.")
-            result = SkillsCrew().run("Analyse data", context="extra detail")
+            result = SkillsCrew().run("Analyse data", chat_history="...", context="extra detail")
         """
-        inputs = {"task_description": task_description, **extra_inputs}
+        inputs = {
+            "task_description": task_description, 
+            "chat_history": chat_history,
+            **extra_inputs
+        }
         logger.info("Kicking off SkillsCrew with inputs: %s", inputs)
 
         result = self.crew().kickoff(inputs=inputs)

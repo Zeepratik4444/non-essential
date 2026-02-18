@@ -1,7 +1,8 @@
 import sys
 import logging
+import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse, FileResponse
@@ -28,6 +29,10 @@ app = FastAPI(
     version="0.2.0"
 )
 
+# --- In-Memory Store ---
+# thread_id -> list of {"role": "user"|"assistant", "content": "..."}
+CHAT_HISTORY: Dict[str, List[Dict[str, str]]] = {}
+
 # Static Files and UI folder (Fixed pathing)
 static_path = Path(__file__).parent / "static"
 app.mount("/ui", StaticFiles(directory=str(static_path), html=True), name="static")
@@ -49,10 +54,16 @@ class RunRequest(BaseModel):
         description="Optional additional context or parameters for the crew.",
         example={"context": "Use Tailwind CSS for styling"}
     )
+    thread_id: str | None = Field(
+        default=None,
+        description="Optional thread ID to maintain conversation context.",
+        example="123e4567-e89b-12d3-a456-426614174000"
+    )
 
 class RunResponse(BaseModel):
     success: bool
     result: str
+    thread_id: str | None = None
     message: str | None = None
 
 class SkillCreateRequest(BaseModel):
@@ -88,22 +99,44 @@ async def run_skill_crew(request: RunRequest):
     """
     Execute the Skill-Driven Operator with a dynamic task description.
     """
-    logger.info("Received run request: %s", request.task_description)
+    logger.info("Received run request: %s (thread_id: %s)", request.task_description, request.thread_id)
     
     try:
-        # Initialize the crew
-        # Note: SkillsCrew extracts settings internally
-        crew = SkillsCrew()
+        # 1. Handle thread_id
+        thread_id = request.thread_id or str(uuid.uuid4())
         
-        # Run the crew
+        # 2. Retrieve and format history
+        history_list = CHAT_HISTORY.get(thread_id, [])
+        formatted_history = "No previous context."
+        if history_list:
+            formatted_history = "\n".join([
+                f"{msg['role'].upper()}: {msg['content']}" 
+                for msg in history_list
+            ])
+            
+        # 3. Initialize and run the crew
+        crew = SkillsCrew()
         result = crew.run(
             task_description=request.task_description, 
+            chat_history=formatted_history,
             **request.extra_inputs
         )
         
+        # 4. Save history
+        if thread_id not in CHAT_HISTORY:
+            CHAT_HISTORY[thread_id] = []
+        
+        CHAT_HISTORY[thread_id].append({"role": "user", "content": request.task_description})
+        CHAT_HISTORY[thread_id].append({"role": "assistant", "content": result})
+        
+        # Keep only last 10 turns (20 messages) to avoid context bloat
+        if len(CHAT_HISTORY[thread_id]) > 20:
+            CHAT_HISTORY[thread_id] = CHAT_HISTORY[thread_id][-20:]
+            
         return RunResponse(
             success=True,
             result=result,
+            thread_id=thread_id,
             message="Task completed successfully"
         )
         

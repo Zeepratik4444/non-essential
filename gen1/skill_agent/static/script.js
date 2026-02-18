@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let startTime = 0;
     let timerInterval = null;
+    let currentThreadId = null;
 
     // --- Core Functions ---
 
@@ -33,7 +34,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/v1/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ task_description: description })
+                body: JSON.stringify({
+                    task_description: description,
+                    thread_id: currentThreadId
+                })
             });
 
             const data = await response.json();
@@ -42,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
             thinkingMsg.remove();
 
             if (data.success) {
+                currentThreadId = data.thread_id;
                 addMessage('agent', data.result);
             } else {
                 addMessage('system', `❌ Error: ${data.message}`, 'error');
@@ -174,6 +179,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearBtn.onclick = () => {
         chatHistory.innerHTML = '';
+        currentThreadId = null;
         addMessage('system', 'History cleared.');
     };
 

@@ -43,6 +43,7 @@ class SkillsManagerInput(BaseModel):
         "run_script",        # → executes scripts/<script>.py
         "get_skill_names",   # → returns raw list of skill names (for API)
         "create_skill",      # → creates a new skill directory and skill.md
+        "write_resource",    # → writes content to a file in references/ or scripts/
     ] = Field(..., description="Action to perform.")
 
     skill_name: str | None = Field(
@@ -65,6 +66,10 @@ class SkillsManagerInput(BaseModel):
         default=None,
         description="Markdown content for 'create_skill'.",
     )
+    resource_content: str | None = Field(
+        default=None,
+        description="Required for 'write_resource'. Content to write to the file.",
+    )
 
     @model_validator(mode="after")
     def validate_required_fields(self) -> "SkillsManagerInput":
@@ -74,6 +79,8 @@ class SkillsManagerInput(BaseModel):
             raise ValueError("'skill_content' is required for 'create_skill'.")
         if self.action == "read_resource" and not self.resource_path:
             raise ValueError("'resource_path' is required for action 'read_resource'.")
+        if self.action == "write_resource" and (not self.resource_path or not self.resource_content):
+            raise ValueError("'resource_path' and 'resource_content' are required for 'write_resource'.")
         if self.action == "run_script" and not self.script_name:
             raise ValueError("'script_name' is required for action 'run_script'.")
         return self
@@ -102,6 +109,7 @@ class SkillsManagerTool(BaseTool):
         "'load_skill' → load full skill.md instructions; "
         "'list_resources' → see available references and scripts for a skill; "
         "'read_resource' → load a reference doc or view a script; "
+        "'write_resource' → create or update a reference or script file; "
         "'run_script' → execute a utility script from a skill. "
         "Always call list_skills first, then load_skill before using any capability."
     )
@@ -348,6 +356,27 @@ class SkillsManagerTool(BaseTool):
             logger.error("Failed to create skill '%s': %s", skill_name, e)
             return f"❌ Failed to create skill: {str(e)}"
 
+    def _handle_write_resource(self, skill_name: str, resource_path: str, content: str) -> str:
+        """Create or initialize a specific file in the skill's directory."""
+        meta = self._resolve_skill(skill_name)
+        if not meta:
+            return f"❌ Skill '{skill_name}' not found."
+
+        full_path = self._safe_resolve(meta, resource_path)
+        if not full_path:
+            return "❌ Access denied: path escapes skill directory."
+
+        # Ensure parent directory exists
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            full_path.write_text(content, encoding="utf-8")
+            logger.info("Wrote resource: '%s/%s' (%d chars)", skill_name, resource_path, len(content))
+            return f"✅ Resource '{resource_path}' written successfully to skill '{skill_name}'."
+        except Exception as e:
+            logger.error("Failed to write resource '%s/%s': %s", skill_name, resource_path, e)
+            return f"❌ Failed to write resource: {str(e)}"
+
     def _run(self, **kwargs: Any) -> str:
         action = kwargs["action"]
         skill_name = kwargs.get("skill_name") or ""
@@ -363,6 +392,7 @@ class SkillsManagerTool(BaseTool):
             "run_script":     lambda: self._handle_run_script(skill_name, script_name, script_args),
             "get_skill_names": lambda: list(self._get_cache().keys()),
             "create_skill":    lambda: self._handle_create_skill(skill_name, kwargs.get("skill_content", "")),
+            "write_resource":  lambda: self._handle_write_resource(skill_name, resource_path, kwargs.get("resource_content", "")),
         }
 
         handler = dispatch.get(action)
