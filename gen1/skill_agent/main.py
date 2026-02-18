@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 sys.path.append(str(Path(__file__).parent / "src"))
 
 from src.crew import SkillsCrew
+from src.tools.skills_manager_tool import SkillsManagerTool
 
 # Configure logging
 logging.basicConfig(
@@ -27,7 +28,7 @@ app = FastAPI(
     version="0.2.0"
 )
 
-# --- Static Files and Root Endpoint ---
+# Static Files and UI folder (Fixed pathing)
 static_path = Path(__file__).parent / "static"
 app.mount("/ui", StaticFiles(directory=str(static_path), html=True), name="static")
 
@@ -35,14 +36,6 @@ app.mount("/ui", StaticFiles(directory=str(static_path), html=True), name="stati
 async def read_index():
     """Serve the web interface."""
     return FileResponse(static_path / "index.html")
-
-# Help static files find style.css etc if relative paths are used
-@app.get("/{file_path:path}")
-async def get_static_file(file_path: str):
-    file = static_path / file_path
-    if file.exists() and file.is_file():
-        return FileResponse(file)
-    raise HTTPException(status_code=404)
 
 # --- Pydantic Schemas ---
 class RunRequest(BaseModel):
@@ -62,12 +55,28 @@ class RunResponse(BaseModel):
     result: str
     message: str | None = None
 
+class SkillCreateRequest(BaseModel):
+    name: str = Field(..., example="new-skill")
+    content: str = Field(..., example="# New Skill\n\nDescription here...")
+
 # --- Endpoints ---
 
 @app.get("/health", tags=["Monitoring"])
 async def health_check():
     """Verify the API is running."""
     return {"status": "healthy", "version": "0.2.0"}
+
+@app.get("/api/v1/skills", tags=["Skills"])
+async def get_skills():
+    """Returns a list of all dynamically discovered skills."""
+    try:
+        tool = SkillsManagerTool()
+        # Returns raw list of names as per my recent update to the tool
+        skills = tool._run(action="get_skill_names")
+        return {"skills": sorted(skills)}
+    except Exception as e:
+        logger.error("Error fetching skills: %s", str(e))
+        return {"skills": [], "error": str(e)}
 
 @app.post(
     "/api/v1/run", 
@@ -108,6 +117,33 @@ async def run_skill_crew(request: RunRequest):
                 message=f"Error executing task: {str(e)}"
             ).model_dump()
         )
+
+@app.post("/api/v1/skills", tags=["Skills"])
+async def create_skill(request: SkillCreateRequest):
+    """Dynamically create a new skill."""
+    try:
+        tool = SkillsManagerTool()
+        # Ensure name is slugified/safe
+        safe_name = request.name.lower().replace(" ", "-")
+        
+        result = tool._run(
+            action="create_skill", 
+            skill_name=safe_name, 
+            skill_content=request.content
+        )
+        
+        return {"success": True, "message": result}
+    except Exception as e:
+        logger.error("Error creating skill: %s", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Static File Catch-All (MUST BE LAST) ---
+@app.get("/{file_path:path}")
+async def get_static_file(file_path: str):
+    file = static_path / file_path
+    if file.exists() and file.is_file():
+        return FileResponse(file)
+    raise HTTPException(status_code=404)
 
 # --- CLI Entry Point ---
 if __name__ == "__main__":

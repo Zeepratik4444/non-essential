@@ -31,6 +31,9 @@
                     <a href="#" class="nav-item active" id="nav-console">
                         <span class="icon">🖥️</span> Console
                     </a>
+                    <a href="#" class="nav-item" id="add-skill-btn">
+                        <span class="icon">➕</span> Add Skill
+                    </a>
                     <a href="/docs" target="_blank" class="nav-item">
                         <span class="icon">📚</span> API Docs
                     </a>
@@ -113,6 +116,37 @@
             <div class="gemini-spinner"></div>
             <p>Skills Operator is thinking...</p>
             <span id="loader-timer">0.0s</span>
+        </div>
+    </div>
+
+    <!-- Skill Creation Modal -->
+    <div id="skill-modal" class="modal-overlay hidden">
+        <div class="modal">
+            <header class="modal-header">
+                <h3>Create New Skill</h3>
+                <button id="close-modal" class="btn-icon">✕</button>
+            </header>
+            <form id="skill-form" class="modal-body">
+                <div class="form-group">
+                    <label for="new-skill-name">Skill Name (slug)</label>
+                    <input type="text" id="new-skill-name" placeholder="e.g. cloud-architecture" required>
+                </div>
+                <div class="form-group">
+                    <label for="new-skill-content">Skill Definition (Markdown)</label>
+                    <textarea id="new-skill-content" placeholder="---
+name: Cloud Architecture
+description: Analysis and design of cloud systems...
+---
+
+# PROTOCOL
+1. Analyze requirements...
+..." required rows="12"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" id="cancel-skill" class="btn-secondary">Cancel</button>
+                    <button type="submit" class="btn-primary">Create Skill</button>
+                </div>
+            </form>
         </div>
     </div>
 

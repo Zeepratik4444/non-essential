@@ -20,14 +20,14 @@ document.addEventListener('DOMContentLoaded', () => {
     async function executeTask(description) {
         if (!description.trim()) return;
 
-        // UI State: Loading
+        // UI State: User Message
         addMessage('user', description);
         taskInput.value = '';
         taskInput.style.height = 'auto';
 
-        loader.classList.remove('hidden');
+        // UI State: Agent Thinking
+        const thinkingMsg = showThinking();
         startTime = Date.now();
-        timerInterval = setInterval(updateTimer, 100);
 
         try {
             const response = await fetch('/api/v1/run', {
@@ -38,17 +38,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
 
+            // Remove Thinking Animation
+            thinkingMsg.remove();
+
             if (data.success) {
                 addMessage('agent', data.result);
             } else {
                 addMessage('system', `❌ Error: ${data.message}`, 'error');
             }
         } catch (error) {
+            thinkingMsg.remove();
             addMessage('system', `❌ Connection failed: ${error.message}`, 'error');
-        } finally {
-            clearInterval(timerInterval);
-            loader.classList.add('hidden');
         }
+    }
+
+    function showThinking() {
+        const msgDiv = document.createElement('div');
+        msgDiv.className = 'message agent';
+        msgDiv.innerHTML = `
+            <div class="message-content thinking-bubble">
+                <span class="thinking-text">Skills Operator is thinking</span>
+                <div class="dot-pulse">
+                    <span></span><span></span><span></span>
+                </div>
+            </div>
+        `;
+        chatHistory.appendChild(msgDiv);
+        chatHistory.scrollTop = chatHistory.scrollHeight;
+        return msgDiv;
     }
 
     function addMessage(role, content, type = '') {
@@ -71,21 +88,72 @@ document.addEventListener('DOMContentLoaded', () => {
         chatHistory.scrollTop = chatHistory.scrollHeight;
     }
 
-    // --- Dynamic Skills discovery (Mock implementation for now, could be an endpoint) ---
-    function populateSkills() {
-        const skills = ['Financial Analysis', 'Legal Review', 'HR Recruitment', 'Customer Support', 'Frontend Dev', 'API Dev', 'Database Design'];
-        skillsList.innerHTML = '';
-        skills.forEach(skill => {
-            const div = document.createElement('div');
-            div.className = 'skill-tag';
-            div.textContent = skill;
-            div.onclick = () => {
-                taskInput.value = `Load ${skill} and help me with...`;
-                taskInput.focus();
-            };
-            skillsList.appendChild(div);
-        });
+    async function populateSkills() {
+        try {
+            const response = await fetch('/api/v1/skills');
+            const data = await response.json();
+            const skills = data.skills || [];
+
+            skillsList.innerHTML = '';
+            skills.forEach(skill => {
+                const div = document.createElement('div');
+                div.className = 'skill-tag';
+                // Clean up name for display (e.g. "frontend-development" -> "Frontend Development")
+                const displayName = skill.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+                div.textContent = displayName;
+                div.onclick = () => {
+                    taskInput.value = `Load ${skill} and help me with...`;
+                    taskInput.focus();
+                };
+                skillsList.appendChild(div);
+            });
+        } catch (error) {
+            console.error('Failed to fetch skills:', error);
+            skillsList.innerHTML = '<p style="font-size: 0.75rem; color: var(--error-red); padding: 12px;">Failed to load skills.</p>';
+        }
     }
+
+    // --- Skill Creation Modal ---
+    const addSkillBtn = document.getElementById('add-skill-btn');
+    const modal = document.getElementById('skill-modal');
+    const closeBtn = document.getElementById('close-modal');
+    const cancelBtn = document.getElementById('cancel-skill');
+    const skillForm = document.getElementById('skill-form');
+
+    addSkillBtn.onclick = (e) => {
+        e.preventDefault();
+        modal.classList.remove('hidden');
+    };
+
+    const closeModal = () => modal.classList.add('hidden');
+    closeBtn.onclick = closeModal;
+    cancelBtn.onclick = closeModal;
+
+    skillForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const name = document.getElementById('new-skill-name').value;
+        const content = document.getElementById('new-skill-content').value;
+
+        try {
+            const response = await fetch('/api/v1/skills', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, content })
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                addMessage('system', `✅ ${data.message}`);
+                closeModal();
+                skillForm.reset();
+                populateSkills(); // Refresh sidebar
+            } else {
+                alert(`Error: ${data.message || 'Failed to create skill'}`);
+            }
+        } catch (error) {
+            alert(`Connection failed: ${error.message}`);
+        }
+    };
 
     // --- Event Listeners ---
 

@@ -41,6 +41,8 @@ class SkillsManagerInput(BaseModel):
         "list_resources",    # → lists references/ and scripts/
         "read_resource",     # → loads a reference or script file
         "run_script",        # → executes scripts/<script>.py
+        "get_skill_names",   # → returns raw list of skill names (for API)
+        "create_skill",      # → creates a new skill directory and skill.md
     ] = Field(..., description="Action to perform.")
 
     skill_name: str | None = Field(
@@ -59,11 +61,17 @@ class SkillsManagerInput(BaseModel):
         default="",
         description="Optional space-separated args for 'run_script'.",
     )
+    skill_content: str | None = Field(
+        default=None,
+        description="Markdown content for 'create_skill'.",
+    )
 
     @model_validator(mode="after")
     def validate_required_fields(self) -> "SkillsManagerInput":
-        if self.action != "list_skills" and not self.skill_name:
+        if self.action not in ["list_skills", "get_skill_names"] and not self.skill_name:
             raise ValueError(f"'skill_name' is required for action '{self.action}'.")
+        if self.action == "create_skill" and not self.skill_content:
+            raise ValueError("'skill_content' is required for 'create_skill'.")
         if self.action == "read_resource" and not self.resource_path:
             raise ValueError("'resource_path' is required for action 'read_resource'.")
         if self.action == "run_script" and not self.script_name:
@@ -307,6 +315,39 @@ class SkillsManagerTool(BaseTool):
             f"EXIT CODE: {result.returncode}"
         )
 
+    def _handle_create_skill(self, skill_name: str, content: str) -> str:
+        """Create a new skill directory and skill.md file."""
+        skills_dir = self._get_skills_dir()
+        if not skills_dir.exists():
+            skills_dir.mkdir(parents=True, exist_ok=True)
+
+        skill_path = skills_dir / skill_name
+        if skill_path.exists():
+            return f"❌ Skill '{skill_name}' already exists."
+
+        try:
+            skill_path.mkdir(parents=True)
+            skill_md = skill_path / "skill.md"
+            
+            # Ensure it has basic front matter if not provided
+            if not content.strip().startswith("---"):
+                name_display = skill_name.replace("-", " ").title()
+                header = f"---\nname: {name_display}\ndescription: Auto-created skill for {name_display}\ntriggers: []\n---\n\n"
+                content = header + content
+
+            skill_md.write_text(content, encoding="utf-8")
+            
+            # Create subdirectories for best practice
+            (skill_path / "references").mkdir(exist_ok=True)
+            (skill_path / "scripts").mkdir(exist_ok=True)
+            
+            self._refresh_cache()
+            logger.info("Created new skill: %s", skill_name)
+            return f"✅ Skill '{skill_name}' created successfully."
+        except Exception as e:
+            logger.error("Failed to create skill '%s': %s", skill_name, e)
+            return f"❌ Failed to create skill: {str(e)}"
+
     def _run(self, **kwargs: Any) -> str:
         action = kwargs["action"]
         skill_name = kwargs.get("skill_name") or ""
@@ -320,6 +361,8 @@ class SkillsManagerTool(BaseTool):
             "list_resources": lambda: self._handle_list_resources(skill_name),
             "read_resource":  lambda: self._handle_read_resource(skill_name, resource_path),
             "run_script":     lambda: self._handle_run_script(skill_name, script_name, script_args),
+            "get_skill_names": lambda: list(self._get_cache().keys()),
+            "create_skill":    lambda: self._handle_create_skill(skill_name, kwargs.get("skill_content", "")),
         }
 
         handler = dispatch.get(action)
