@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, Process, Task, LLM
 from crewai.project import CrewBase, agent, crew, task
 
 from src.config.settings import settings
@@ -28,13 +28,15 @@ class SkillsCrew:
 
     def __init__(self) -> None:
         settings.validate()
-        logger.info("SkillsCrew initialized. Skills dir: %s", settings.SKILLS_DIR)
+        self.llm = LLM(model=settings.LLM_MODEL)
+        logger.info("SkillsCrew initialized. Skills dir: %s, Model: %s", settings.SKILLS_DIR, settings.LLM_MODEL)
 
     @agent
     def skills_operator(self) -> Agent:
         return Agent(
             config=self.agents_config["skills_operator"],  # type: ignore[index]
             tools=[SkillsManagerTool()],
+            llm=self.llm,
             verbose=True,
             memory=True,
             cache=True,

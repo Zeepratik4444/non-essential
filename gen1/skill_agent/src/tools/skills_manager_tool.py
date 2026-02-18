@@ -131,9 +131,9 @@ class SkillsManagerTool(BaseTool):
         for skill_dir in sorted(skills_dir.iterdir()):
             if not skill_dir.is_dir():
                 continue
-            skill_md = skill_dir / "skills.md"
+            skill_md = skill_dir / "skill.md"
             if not skill_md.exists():
-                logger.warning("Skipping '%s': no skills.md found.", skill_dir.name)
+                logger.warning("Skipping '%s': no skill.md found.", skill_dir.name)
                 continue
             try:
                 meta = self._parse_skill_md(skill_dir, skill_md)

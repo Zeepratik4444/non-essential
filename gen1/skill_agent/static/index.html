@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skill Agent | AI Operator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+
+<body class="dark-theme">
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <span class="logo-icon">♊</span>
+                    <span class="logo-text">Skill Agent</span>
+                </div>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <h3>SYSTEM</h3>
+                    <a href="#" class="nav-item active" id="nav-console">
+                        <span class="icon">🖥️</span> Console
+                    </a>
+                    <a href="/docs" target="_blank" class="nav-item">
+                        <span class="icon">📚</span> API Docs
+                    </a>
+                </div>
+
+                <div class="nav-section">
+                    <h3>CAPABILITIES</h3>
+                    <div id="skills-list" class="skills-grid">
+                        <div class="skill-skeleton"></div>
+                        <div class="skill-skeleton"></div>
+                        <div class="skill-skeleton"></div>
+                    </div>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="status-indicator">
+                    <span class="dot green"></span>
+                    <span class="status-text">Gemini 1.5 Pro Online</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="task-info">
+                    <h2 id="current-task-title">Ready for instructions</h2>
+                    <p id="system-status-msg">Select a skill or enter a custom prompt below.</p>
+                </div>
+                <div class="top-actions">
+                    <button id="clear-console" class="btn-icon" title="Clear History">🧹</button>
+                    <button id="settings-toggle" class="btn-icon">⚙️</button>
+                </div>
+            </header>
+
+            <div class="content-area">
+                <div id="chat-history" class="chat-container">
+                    <!-- Welcome Message -->
+                    <div class="message system">
+                        <div class="message-content">
+                            <h3>Welcome to Skill Agent</h3>
+                            <p>I am a precision AI operator driven by structured protocols. How can I assist you today?
+                            </p>
+                            <div class="quick-prompts">
+                                <button class="btn-quick"
+                                    data-prompt="Analyze the profitability of a SaaS company with $5M ARR and $3M total costs.">📈
+                                    Financial Analysis</button>
+                                <button class="btn-quick"
+                                    data-prompt="Design a PostgreSQL schema for a project management tool.">🗄️ Database
+                                    Design</button>
+                                <button class="btn-quick"
+                                    data-prompt="Review a standard NDA 'Confidential Information' clause.">⚖️ Legal
+                                    Review</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <footer class="input-area">
+                <div class="input-wrapper">
+                    <textarea id="task-input" placeholder="Enter your task description here..." rows="1"></textarea>
+                    <button id="send-btn" class="btn-primary">
+                        <span class="btn-text">Execute</span>
+                        <span class="spinner hidden"></span>
+                    </button>
+                </div>
+                <div class="input-footer">
+                    <span class="shortcut">Press <kbd>Enter</kbd> to execute</span>
+                    <span class="model-badge">Model: gemini-1.5-pro</span>
+                </div>
+            </footer>
+        </main>
+    </div>
+
+    <!-- Modals / Overlays -->
+    <div id="loading-overlay" class="overlay hidden">
+        <div class="loader-content">
+            <div class="gemini-spinner"></div>
+            <p>Skills Operator is thinking...</p>
+            <span id="loader-timer">0.0s</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
