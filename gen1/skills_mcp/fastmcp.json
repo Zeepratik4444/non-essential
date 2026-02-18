@@ -1,0 +1,9 @@
+{
+    "server": "app.py",
+    "name": "skills-mcp-server",
+    "transport": "stdio",
+    "env": {
+        "SKILLS_DIR": "./skills",
+        "LOG_LEVEL": "INFO"
+    }
+}

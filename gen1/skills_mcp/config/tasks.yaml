@@ -1,0 +1,11 @@
+execute_task:
+  description: >
+    BACKGROUND CONTEXT (PREVIOUS TURNS):
+    {chat_history}
+
+    CURRENT TASK:
+    {task_description}
+  expected_output: >
+    A complete, accurate result following the loaded skill's output format.
+    All data must come from tool outputs — no hallucinated information.
+  agent: skills_operator

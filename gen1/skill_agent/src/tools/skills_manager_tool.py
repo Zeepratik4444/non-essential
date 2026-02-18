@@ -43,7 +43,9 @@ class SkillsManagerInput(BaseModel):
         "run_script",        # → executes scripts/<script>.py
         "get_skill_names",   # → returns raw list of skill names (for API)
         "create_skill",      # → creates a new skill directory and skill.md
-        "write_resource",    # → writes content to a file in references/ or scripts/
+        "write_file",        # → write/overwrite a file in skill dir
+        "refresh_cache",     # → force reload skills from disk
+        "delete_skill",      # → remove a skill entirely
     ] = Field(..., description="Action to perform.")
 
     skill_name: str | None = Field(
@@ -66,9 +68,13 @@ class SkillsManagerInput(BaseModel):
         default=None,
         description="Markdown content for 'create_skill'.",
     )
-    resource_content: str | None = Field(
+    file_path: str | None = Field(
         default=None,
-        description="Required for 'write_resource'. Content to write to the file.",
+        description="Relative file path within a skill dir. Required for 'write_file'. E.g. 'references/api.md'",
+    )
+    file_content: str | None = Field(
+        default=None,
+        description="File content string. Required for 'write_file'.",
     )
 
     @model_validator(mode="after")
@@ -79,8 +85,8 @@ class SkillsManagerInput(BaseModel):
             raise ValueError("'skill_content' is required for 'create_skill'.")
         if self.action == "read_resource" and not self.resource_path:
             raise ValueError("'resource_path' is required for action 'read_resource'.")
-        if self.action == "write_resource" and (not self.resource_path or not self.resource_content):
-            raise ValueError("'resource_path' and 'resource_content' are required for 'write_resource'.")
+        if self.action == "write_file" and (not self.file_path or not self.file_content):
+            raise ValueError("'file_path' and 'file_content' are required for 'write_file'.")
         if self.action == "run_script" and not self.script_name:
             raise ValueError("'script_name' is required for action 'run_script'.")
         return self
@@ -109,7 +115,9 @@ class SkillsManagerTool(BaseTool):
         "'load_skill' → load full skill.md instructions; "
         "'list_resources' → see available references and scripts for a skill; "
         "'read_resource' → load a reference doc or view a script; "
-        "'write_resource' → create or update a reference or script file; "
+        "'write_file' → create or update a reference or script file; "
+        "'delete_skill' → remove a skill directory entirely; "
+        "'refresh_cache' → force reload skills from disk; "
         "'run_script' → execute a utility script from a skill. "
         "Always call list_skills first, then load_skill before using any capability."
     )
@@ -356,13 +364,25 @@ class SkillsManagerTool(BaseTool):
             logger.error("Failed to create skill '%s': %s", skill_name, e)
             return f"❌ Failed to create skill: {str(e)}"
 
-    def _handle_write_resource(self, skill_name: str, resource_path: str, content: str) -> str:
-        """Create or initialize a specific file in the skill's directory."""
+    def _handle_refresh_cache(self) -> str:
+        """Force reload skills from disk."""
+        self._refresh_cache()
+        cache = self._get_cache()
+        names = sorted(cache.keys())
+        return f"✅ Cache refreshed. {len(names)} skills available: {names}"
+
+    def _handle_write_file(self, skill_name: str, file_path: str, content: str) -> str:
+        """Write/overwrite a file inside a skill directory."""
         meta = self._resolve_skill(skill_name)
         if not meta:
-            return f"❌ Skill '{skill_name}' not found."
-
-        full_path = self._safe_resolve(meta, resource_path)
+            # Skill dir might not exist in cache yet — try direct path
+            skill_dir = self._get_skills_dir() / skill_name
+            if not skill_dir.exists():
+                return f"❌ Skill '{skill_name}' not found. Create it first with create_skill."
+            # Mock meta for _safe_resolve
+            meta = type("_M", (), {"path": skill_dir, "name": skill_name})()
+        
+        full_path = self._safe_resolve(meta, file_path)
         if not full_path:
             return "❌ Access denied: path escapes skill directory."
 
@@ -371,11 +391,25 @@ class SkillsManagerTool(BaseTool):
 
         try:
             full_path.write_text(content, encoding="utf-8")
-            logger.info("Wrote resource: '%s/%s' (%d chars)", skill_name, resource_path, len(content))
-            return f"✅ Resource '{resource_path}' written successfully to skill '{skill_name}'."
+            logger.info("Wrote file: '%s/%s' (%d chars)", skill_name, file_path, len(content))
+            return f"✅ Written: skills/{skill_name}/{file_path} ({len(content)} chars)"
         except Exception as e:
-            logger.error("Failed to write resource '%s/%s': %s", skill_name, resource_path, e)
-            return f"❌ Failed to write resource: {str(e)}"
+            logger.error("Failed to write file '%s/%s': %s", skill_name, file_path, e)
+            return f"❌ Failed to write file: {str(e)}"
+
+    def _handle_delete_skill(self, skill_name: str) -> str:
+        """Delete a skill directory entirely."""
+        import shutil
+        meta = self._resolve_skill(skill_name)
+        if not meta:
+            return f"❌ Skill '{skill_name}' not found."
+        try:
+            shutil.rmtree(meta.path)
+            self._refresh_cache()
+            return f"✅ Skill '{skill_name}' deleted."
+        except Exception as e:
+            logger.error("Failed to delete skill '%s': %s", skill_name, e)
+            return f"❌ Failed to delete skill: {str(e)}"
 
     def _run(self, **kwargs: Any) -> str:
         action = kwargs["action"]
@@ -389,10 +423,12 @@ class SkillsManagerTool(BaseTool):
             "load_skill":     lambda: self._handle_load_skill(skill_name),
             "list_resources": lambda: self._handle_list_resources(skill_name),
             "read_resource":  lambda: self._handle_read_resource(skill_name, resource_path),
-            "run_script":     lambda: self._handle_run_script(skill_name, script_name, script_args),
+            "run_script":      lambda: self._handle_run_script(skill_name, script_name, script_args),
             "get_skill_names": lambda: list(self._get_cache().keys()),
             "create_skill":    lambda: self._handle_create_skill(skill_name, kwargs.get("skill_content", "")),
-            "write_resource":  lambda: self._handle_write_resource(skill_name, resource_path, kwargs.get("resource_content", "")),
+            "refresh_cache":   lambda: self._handle_refresh_cache(),
+            "write_file":      lambda: self._handle_write_file(skill_name, kwargs.get("file_path", ""), kwargs.get("file_content", "")),
+            "delete_skill":    lambda: self._handle_delete_skill(skill_name),
         }
 
         handler = dispatch.get(action)
